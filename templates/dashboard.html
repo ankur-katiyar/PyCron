@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Scheduler Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+            background: #e9ecef;
+            color: #343a40;
+        }
+        h1, h2 {
+            color: #343a40;
+            text-align: center;
+        }
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            background: #ffffff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 15px rgba(0,0,0,0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #dee2e6;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background: #007bff;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        button {
+            padding: 8px 12px;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        .btn-primary { background: #28a745; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-edit { background: #ffc107; color: black; }
+        button:hover {
+            opacity: 0.8;
+        }
+        .logs {
+            background: #f1f3f5;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            font-family: monospace;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0,0,0,0.2);
+            width: 300px;
+        }
+        .toast {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: green;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Job Scheduler Dashboard</h1>
+        
+        <h2>Add Job</h2>
+        <form id="jobform">
+            <label for="name">Job Name:</label>
+            <input type="text" id="name" name="name" placeholder="Enter job name" required>
+            
+            <label for="schedule">Schedule (Cron JSON):</label>
+            <input type="text" id="schedule" name="schedule" placeholder='{"minute": "*/5"}' required>
+            
+            <label for="command">Command:</label>
+            <input type="text" id="command" name="command" placeholder="Enter command" required>
+            
+            <label for="dependencies">Dependencies (Comma separated job IDs):</label>
+            <input type="text" id="dependencies" name="dependencies" placeholder="e.g., 1,2,3">
+            
+            <button type="button" class="btn-primary" onclick="submitJob()">Submit</button>
+        </form>
+
+        <h2>Jobs</h2>
+        <button class="btn-primary" onclick="refreshJobs()">Refresh</button>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Schedule</th>
+                    <th>Command</th>
+                    <th>Dependencies</th>
+                    <th>Status</th>
+                    <th>Last Run</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="jobTableBody">
+                <!-- Jobs will be loaded here -->
+            </tbody>
+        </table>
+    </div>
+
+    <div id="editModal" class="modal">
+        <h2>Edit Job</h2>
+        <label>Job Name:</label>
+        <input type="text" id="editName">
+        
+        <label>Schedule:</label>
+        <input type="text" id="editSchedule">
+        
+        <label>Command:</label>
+        <input type="text" id="editCommand">
+        
+        <label>Dependencies:</label>
+        <input type="text" id="editDependencies">
+        
+        <button class="btn-primary" onclick="submitJobUpdate()">Update Job</button>
+        <button class="btn-danger" onclick="closeModal()">Cancel</button>
+    </div>
+
+    <script>
+        function showToast(message, type = "success") {
+            let color = type === "success" ? "green" : "red";
+            let toast = document.createElement("div");
+            toast.className = "toast";
+            toast.style.background = color;
+            toast.innerText = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        function submitJob() {
+            const data = {
+                name: document.getElementById("name").value,
+                schedule: document.getElementById("schedule").value,
+                command: document.getElementById("command").value,
+                dependencies: document.getElementById("dependencies").value.split(",").map(s => s.trim()).filter(s => s)
+            };
+            
+            // Validate schedule JSON
+            try {
+                JSON.parse(data.schedule);
+            } catch (e) {
+                showToast("Invalid schedule format", "error");
+                return;
+            }
+            
+            fetch("/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw new Error(err.detail); });
+                    }
+                    return response.json();
+                })
+                .then(() => { showToast("Job added successfully!"); location.reload(); })
+                .catch(error => showToast(`Error adding job: ${error.message}`, "error"));
+        }
+
+        function runJob(jobId) {
+            fetch(`/jobs/${jobId}/run`, { method: "POST" })
+                .then(response => response.json())
+                .then(() => showToast("Job run successfully!"))
+                .catch(error => showToast("Error running job", "error"));
+        }
+
+        function deleteJob(jobId) {
+            if (!confirm(`Are you sure you want to delete job ${jobId}?`)) return;
+            
+            fetch(`/jobs/${jobId}`, { method: "DELETE" })
+                .then(() => { showToast("Job deleted!", "error"); document.getElementById(`job-${jobId}`).remove(); })
+                .catch(error => showToast("Error deleting job", "error"));
+        }
+
+        function editJob(jobId) {
+            fetch(`/jobs/${jobId}`)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById("editName").value = data.name;
+                    document.getElementById("editSchedule").value = data.schedule;
+                    document.getElementById("editCommand").value = data.command;
+                    document.getElementById("editDependencies").value = data.dependencies.join(",");
+                    document.getElementById("editModal").style.display = "block";
+                    document.getElementById("editModal").dataset.jobId = jobId;
+                })
+                .catch(error => showToast("Error fetching job details", "error"));
+        }
+
+        function submitJobUpdate() {
+            const jobId = document.getElementById("editModal").dataset.jobId;
+            const data = {
+                name: document.getElementById("editName").value,
+                schedule: document.getElementById("editSchedule").value,
+                command: document.getElementById("editCommand").value,
+                dependencies: document.getElementById("editDependencies").value.split(",").map(s => s.trim())
+            };
+
+            // Validate schedule JSON
+            try {
+                JSON.parse(data.schedule);
+            } catch (e) {
+                showToast("Invalid schedule format", "error");
+                return;
+            }
+
+            fetch(`/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
+                .then(response => response.json())
+                .then(() => { showToast("Job updated successfully!"); location.reload(); })
+                .catch(error => showToast("Error updating job", "error"));
+        }
+
+        function closeModal() {
+            document.getElementById("editModal").style.display = "none";
+        }
+
+        function refreshJobs() {
+            loadJobs();
+        }
+
+        function loadJobs() {
+            fetch("/jobs")
+                .then(response => response.json())
+                .then(jobs => {
+                    const jobTableBody = document.getElementById("jobTableBody");
+                    jobTableBody.innerHTML = "";
+                    jobs.forEach(job => {
+                        const row = `<tr id="job-${job.id}">
+                            <td>${job.id}</td>
+                            <td>${job.name}</td>
+                            <td>${job.schedule}</td>
+                            <td>${job.command}</td>
+                            <td>${job.dependencies.join(", ")}</td>
+                            <td>${job.status}</td>
+                            <td>${job.last_run || "Never"}</td>
+                            <td>
+                                <button class="btn-primary" onclick="runJob(${job.id})">Run Now</button>
+                                <button class="btn-edit" onclick="editJob(${job.id})">Edit</button>
+                                <button class="btn-danger" onclick="deleteJob(${job.id})">Delete</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td colspan="8"><pre class="logs">${job.logs}</pre></td>
+                        </tr>`;
+                        jobTableBody.insertAdjacentHTML('beforeend', row);
+                    });
+                })
+                .catch(error => showToast("Error loading jobs", "error"));
+        }
+
+        // Call loadJobs on page load
+        document.addEventListener("DOMContentLoaded", loadJobs);
+    </script>
+
+</body>
+</html>
