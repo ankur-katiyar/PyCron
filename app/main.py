@@ -1,8 +1,12 @@
 # main.py
 import uvicorn
+import os
 from app import app  # use the shared app instance
 from models import SessionLocal, User, Base
 from passlib.context import CryptContext
+from sqlalchemy import Column, Integer, String, DateTime, Text, create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 # Import routes to ensure they are registered.
 import api
@@ -28,10 +32,12 @@ def create_default_admin_user():
 
 if __name__ == "__main__":
     # Create the database tables if they don't exist
-    #Base.metadata.create_all(bind=engine)
-    
+    DATABASE_URL = os.environ.get("DATABASE_URL","sqlite:///./scheduler.db")
+
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=engine)
     # Create the default admin user
     create_default_admin_user()
     
     # Start the application
-    #uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

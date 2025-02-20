@@ -1,12 +1,14 @@
 # models.py
 import datetime
 import json
+import os
 from sqlalchemy import Column, Integer, String, DateTime, Text, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from passlib.context import CryptContext
 
-DATABASE_URL = "sqlite:///./scheduler.db"
+#DATABASE_URL = "sqlite:///./scheduler.db"
+DATABASE_URL = os.environ.get("DATABASE_URL","sqlite:///./scheduler.db")
 
 Base = declarative_base()
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

@@ -47,6 +47,11 @@ def require_authentication(request: Request):
         raise HTTPException(status_code=401, detail="Not authenticated")
     return user
 
+# Health Check Endpoint
+@app.get("/health")
+def health_check():
+    return {"status": "success"}
+
 # Route: Login Page
 @app.get("/login")
 def login_form(request: Request):

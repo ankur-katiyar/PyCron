@@ -35,6 +35,7 @@
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
 - [License](#license)
+- [Kubernetes Deployment](#kubernetes-deployment)
 
 ## Prerequisites
 
@@ -319,5 +320,163 @@ Contributions are welcome! Please follow these steps:
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+## Kubernetes Deployment
+
+### Prerequisites for Kubernetes Deployment
+
+- Kubernetes cluster (local or cloud-based)
+- kubectl CLI tool installed and configured
+- Docker installed (for building the container image)
+- Access to a container registry (e.g., Docker Hub, Google Container Registry)
+
+### Deployment Steps
+
+1. **Build and Push the Docker Image**
+
+   ```bash
+   # Build the Docker image
+   docker build -t job-scheduler:latest .
+
+   # Tag the image for your registry
+   docker tag job-scheduler:latest your-registry/job-scheduler:latest
+
+   # Push to your registry
+   docker push your-registry/job-scheduler:latest
+   ```
+
+2. **Deploy to Kubernetes**
+
+   The application includes Kubernetes manifests in the `k8s/` directory:
+
+   ```bash
+   # Create namespace (optional)
+   kubectl create namespace job-scheduler
+
+   # Apply the deployment
+   kubectl apply -f k8s/deployment.yaml
+   ```
+
+3. **Verify the Deployment**
+
+   ```bash
+   # Check if pods are running
+   kubectl get pods -n job-scheduler
+
+   # Check the service
+   kubectl get svc job-scheduler-service -n job-scheduler
+
+   # View logs
+   kubectl logs -f deployment/job-scheduler -n job-scheduler
+   ```
+
+### Kubernetes Configuration Files
+
+The deployment uses the following Kubernetes resources:
+
+- **PersistentVolumeClaim:** For storing the SQLite database
+- **Deployment:** Main application deployment
+- **Service:** Exposes the application
+
+Key features of the deployment:
+
+- Single replica deployment (to prevent scheduling conflicts)
+- Persistent storage for the SQLite database
+- Resource limits and requests
+- Health checks via liveness and readiness probes
+- LoadBalancer service type (configurable)
+
+### Monitoring and Maintenance
+
+1. **Health Checks**
+
+   The application exposes a `/health` endpoint that Kubernetes uses to monitor the pod's health:
+   ```bash
+   # Check the pod's health status
+   kubectl describe pod -l app=job-scheduler -n job-scheduler
+   ```
+
+2. **Scaling Considerations**
+
+   The application is designed to run as a single instance. Horizontal scaling is not recommended due to:
+   - SQLite database limitations
+   - Potential scheduling conflicts
+   - Job execution coordination requirements
+
+3. **Database Backups**
+
+   To backup the SQLite database:
+   ```bash
+   # Copy the database file from the pod
+   kubectl cp job-scheduler-pod:/app/data/scheduler.db backup.db
+   ```
+
+### Troubleshooting Kubernetes Deployment
+
+1. **Pod Won't Start**
+   - Check pod events:
+     ```bash
+     kubectl describe pod -l app=job-scheduler -n job-scheduler
+     ```
+   - View pod logs:
+     ```bash
+     kubectl logs -f deployment/job-scheduler -n job-scheduler
+     ```
+
+2. **Service Not Accessible**
+   - Verify service configuration:
+     ```bash
+     kubectl describe service job-scheduler-service -n job-scheduler
+     ```
+   - Check endpoints:
+     ```bash
+     kubectl get endpoints job-scheduler-service -n job-scheduler
+     ```
+
+3. **Database Issues**
+   - Check persistent volume:
+     ```bash
+     kubectl describe pvc scheduler-db-pvc -n job-scheduler
+     ```
+   - Verify volume mounts:
+     ```bash
+     kubectl describe pod -l app=job-scheduler -n job-scheduler
+     ```
+
+### Production Considerations
+
+1. **Security**
+   - Use Kubernetes Secrets for sensitive data
+   - Implement network policies
+   - Configure proper RBAC
+   - Consider using a ServiceAccount
+
+2. **High Availability**
+   - Consider using a more robust database (e.g., PostgreSQL)
+   - Implement proper backup strategies
+   - Use node affinity rules for better placement
+
+3. **Monitoring**
+   - Set up Prometheus metrics
+   - Configure proper logging
+   - Implement alerting
+
+4. **Updates and Rollbacks**
+   ```bash
+   # Rolling update
+   kubectl set image deployment/job-scheduler job-scheduler=your-registry/job-scheduler:new-version
+
+   # Rollback if needed
+   kubectl rollout undo deployment/job-scheduler
+   ```
+
+### Environment Variables
+
+The following environment variables can be configured in the deployment:
+
+- `DATABASE_URL`: SQLite database location (default: `sqlite:///app/data/scheduler.db`)
+- Add other environment variables as needed
+
+Update these in the `deployment.yaml` file under the `env` section of the container spec.
 
 ---
