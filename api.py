@@ -1,6 +1,6 @@
 # api.py
 import json
-from fastapi import FastAPI, HTTPException, Request, Depends, Form, status
+from fastapi import FastAPI, HTTPException, Request, Depends, Form, status, Body
 from pydantic import BaseModel
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -29,6 +29,9 @@ templates = Jinja2Templates(directory="templates")
 
 logger = logging.getLogger('uvicorn.error')
 logger.setLevel(logging.DEBUG)
+
+class StatusUpdate(BaseModel):
+    status: str
 
 # Pydantic model for job creation
 class JobModel(BaseModel):
@@ -109,6 +112,12 @@ def get_jobs(user: User = Depends(require_authentication)):
     jobs = session.query(Job).all()
     job_list = []
     for job in jobs:
+        try:
+            logs = json.loads(job.logs) if job.logs else []
+        except json.JSONDecodeError:
+            logs = []
+            logger.error(f"Invalid JSON in logs for job {job.id}")
+
         job_data = {
             "id": job.id,
             "name": job.name,
@@ -117,12 +126,22 @@ def get_jobs(user: User = Depends(require_authentication)):
             "dependencies": json.loads(job.dependencies),
             "status": job.status,
             "last_run": job.last_run.isoformat() if job.last_run else None,
-            "logs": json.loads(job.logs) if job.logs else []
+            "logs": logs,  # Already parsed JSON
+            "run_count": len(logs)
         }
-        # Get next run time from scheduler
+        
+        # Calculate average execution time
+        execution_times = [log.get('execution_time') for log in logs 
+                         if isinstance(log.get('execution_time'), (int, float))]
+        job_data["average_execution_time"] = (
+            sum(execution_times) / len(execution_times) if execution_times else 0
+        )
+        
+        # get next run time from scheduler
         next_run = job_scheduler.get_next_run_time(job.id)
         job_data["next_run"] = next_run
         job_list.append(job_data)
+    
     session.close()
     return job_list
 
@@ -152,7 +171,11 @@ def run_job_adhoc(job_id: int, user: User = Depends(require_authentication)):
     job = session.query(Job).filter(Job.id == job_id).first()
     if not job:
         session.close()
-        raise HTTPException(status_code=404, detail="Job not found.")
+        return {"message": f"Job '{job.name}' is inactive and cannot be run."}
+    
+    if job.status == "inactive":
+        session.close()
+        raise HTTPException(status_code=400, detail="Job is inactive and cannot be run.")
     
     # Check dependencies
     dependencies = json.loads(job.dependencies) if job.dependencies else []
@@ -163,40 +186,93 @@ def run_job_adhoc(job_id: int, user: User = Depends(require_authentication)):
             session.close()
             raise HTTPException(status_code=400, detail=f"Dependencies not complete: {', '.join(incomplete_deps)}.")
     
+    job.status = "running"
+    session.commit()
+    #session.close()
     # Run the job in a separate thread to avoid blocking
+
     thread = Thread(target=job_scheduler.run_job, args=(job_id,))
     thread.start()
-    session.close()
+
     logger.info(f"Job '{job.name}' (ID: {job.id}) triggered ad-hoc.")
     return {"message": f"Job '{job.name}' triggered successfully."}
 
 # Route: Update Job Status
 @app.put("/jobs/{job_id}/status")
-def update_job_status(job_id: int, status: str, user: User = Depends(require_authentication)):
+def update_job_status(job_id: int, status_update: StatusUpdate, user: User = Depends(require_authentication)):
     allowed_statuses = {"scheduled", "complete", "inactive"}
-    if status not in allowed_statuses:
+    if status_update.status not in allowed_statuses:
         raise HTTPException(status_code=400, detail=f"Status must be one of {allowed_statuses}.")
     
+    allowed_statuses = {"scheduled", "complete", "inactive"}
+    if status_update.status not in allowed_statuses:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Status must be one of {allowed_statuses}."
+        )
+        
     session = SessionLocal()
     job = session.query(Job).filter(Job.id == job_id).first()
     if not job:
         session.close()
         raise HTTPException(status_code=404, detail="Job not found.")
     
-    job.status = status
+    job.status = status_update.status
     session.commit()
     
-    if status == "inactive":
-        # Remove job from scheduler
-        job_scheduler.delete_job(job_id)
-    elif status == "scheduled":
+    if status_update.status == "scheduled":
         # Reschedule the job
         job_scheduler.schedule_job(job)
     # If status is "complete", no action needed for scheduler
     
     session.close()
-    logger.info(f"Job ID {job_id} status updated to '{status}'.")
-    return {"message": f"Job ID {job_id} status updated to '{status}'."}
+    logger.info(f"Job ID {job_id} status updated to '{status_update.status}'.")
+    return {"message": f"Job ID {job_id} status updated to '{status_update.status}'."}
+
+# Route: Delete Log Entry
+@app.delete("/jobs/{job_id}/logs/{log_index}")
+def delete_log_entry(job_id: int, log_index: int, user: User = Depends(require_authentication)):
+    session = SessionLocal()
+    job = session.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        session.close()
+        raise HTTPException(status_code=404, detail="Job not found.")
+    
+    logs = json.loads(job.logs) if job.logs else []
+    if log_index < 0 or log_index >= len(logs):
+        session.close()
+        raise HTTPException(status_code=400, detail="Invalid log index.")
+    
+    deleted_log = logs.pop(log_index)
+    job.logs = json.dumps(logs)
+    session.commit()
+    session.close()
+    
+    logger.info(f"Deleted log entry {log_index + 1} for job '{job.name}' (ID: {job.id}).")
+    return {"message": f"Log entry {log_index + 1} for job '{job.name}' deleted successfully."}
+
+# Route: Purge Logs (Keep only the last 10 entries)
+@app.post("/jobs/{job_id}/purge_logs")
+def purge_logs(job_id: int, user: User = Depends(require_authentication)):
+    session = SessionLocal()
+    job = session.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        session.close()
+        raise HTTPException(status_code=404, detail="Job not found.")
+    
+    logs = json.loads(job.logs) if job.logs else []
+    if len(logs) <= 10:
+        session.close()
+        return {"message": "No logs to purge."}
+    
+    # Keep only the last 10 entries
+    purged_logs = logs[-10:]
+    job.logs = json.dumps(purged_logs)
+    session.commit()
+    #session.close()
+    
+    logger.info(f"Purged logs for job '{job.name}' (ID: {job.id}), keeping last 10 entries.")
+    return {"message": f"Logs purged for job '{job.name}'. Kept the last 10 entries."}
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -215,3 +291,46 @@ def startup_event():
 def shutdown_event():
     logger.info("Shutting down the Job Scheduler...")
     job_scheduler.stop()
+
+@app.get("/jobs/{job_id}")
+def get_job(job_id: int):
+    session = SessionLocal()
+    try:
+        job = session.query(Job).filter(Job.id == job_id).first()
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return job
+    except Exception as e:
+        logger.error(f"Error fetching job details for ID {job_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+    finally:
+        session.close()
+
+# Define a Pydantic model for the job update payload
+class JobUpdateModel(BaseModel):
+    name: str
+    schedule: str  # Expecting a JSON string
+    command: str
+    dependencies: list[int]  # List of job IDs
+
+# Route: Update Job
+@app.put("/jobs/{job_id}")
+def update_job(job_id: int, job: JobUpdateModel, user: User = Depends(require_authentication)):
+    session = SessionLocal()
+    existing_job = session.query(Job).filter(Job.id == job_id).first()
+    
+    if not existing_job:
+        session.close()
+        raise HTTPException(status_code=404, detail="Job not found.")
+    
+    # Update job attributes
+    existing_job.name = job.name
+    existing_job.schedule = job.schedule  # Assuming this is a valid JSON string
+    existing_job.command = job.command
+    existing_job.dependencies = json.dumps(job.dependencies)  # Convert list to JSON string
+
+    session.commit()
+    session.refresh(existing_job)
+    session.close()
+    
+    return {"message": f"Job '{existing_job.name}' updated successfully.", "job_id": existing_job.id}
