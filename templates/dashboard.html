@@ -547,23 +547,29 @@
                     const jobTableBody = document.getElementById("jobTableBody");
                     jobTableBody.innerHTML = "";
                     jobs.forEach(job => {
-                        // Process dependencies (handle string vs. array)
+                        // Process dependencies and compute normalized value
                         let deps = "";
                         try {
-                            const parsedDeps = (typeof job.dependencies === "string") ? JSON.parse(job.dependencies) : job.dependencies;
+                            const parsedDeps = (typeof job.dependencies === "string")
+                                ? JSON.parse(job.dependencies)
+                                : job.dependencies;
                             deps = Array.isArray(parsedDeps) ? parsedDeps.join(", ") : parsedDeps;
                         } catch(e) {
                             deps = job.dependencies;
                         }
+                        // Normalize dependencies (remove all whitespace)
+                        const normalizedDeps = deps.replace(/\s/g, "");
                         
-                        // Create the main job row
+                        // Create the main job row and add a class "job-row" to it
                         const row = document.createElement("tr");
+                        row.classList.add("job-row"); // mark as a job row for filtering
                         row.innerHTML = `
                             <td>${job.id}</td>
                             <td>${job.name}</td>
                             <td>${JSON.stringify(job.schedule)}</td>
                             <td>${job.command}</td>
-                            <td>${deps}</td>
+                            <!-- Save normalized dependencies in a data attribute -->
+                            <td data-deps="${normalizedDeps}">${deps}</td>
                             <td>${job.status}</td>
                             <td>${job.last_run || "Never"}</td>
                             <td>${job.next_run || "N/A"}</td>
@@ -585,7 +591,7 @@
                         `;
                         jobTableBody.appendChild(row);
                         
-                        // Create and append the logs row (hidden by default)
+                        // Create and append the logs row (which is not filtered)
                         const logsRow = document.createElement("tr");
                         logsRow.id = "logs-" + job.id;
                         logsRow.style.display = "none";
@@ -598,7 +604,8 @@
                         `;
                         jobTableBody.appendChild(logsRow);
                     });
-                    // After populating jobs, update the inline filter dropdowns
+                    
+                    // After populating jobs, update the inline filter dropdowns using jobsData
                     populateInlineFiltersFromData(jobsData);
                 })
                 .catch(error => console.error("Error loading jobs:", error));
@@ -606,7 +613,6 @@
 
         // Build the filter dropdown options from the fetched jobs data
         function populateInlineFiltersFromData(jobs) {
-            // Create sets for each filterable column (using keys matching our select element IDs)
             const filterSets = {
                 filterID: new Set(),
                 filterName: new Set(),
@@ -619,19 +625,19 @@
                 filterRunCount: new Set(),
                 filterAvgExecTime: new Set()
             };
-
             jobs.forEach(job => {
                 filterSets.filterID.add(String(job.id));
                 filterSets.filterName.add(job.name);
                 filterSets.filterSchedule.add(JSON.stringify(job.schedule));
                 filterSets.filterCommand.add(job.command);
-                // Handle dependencies (parse if necessary)
+                
                 try {
                     const parsedDeps = (typeof job.dependencies === "string") ? JSON.parse(job.dependencies) : job.dependencies;
                     const depsStr = Array.isArray(parsedDeps) ? parsedDeps.join(", ") : parsedDeps;
-                    filterSets.filterDependencies.add(depsStr);
+                    // Normalize dependencies by removing spaces
+                    filterSets.filterDependencies.add(depsStr.replace(/\s/g, ""));
                 } catch (e) {
-                    filterSets.filterDependencies.add(job.dependencies);
+                    filterSets.filterDependencies.add(String(job.dependencies).replace(/\s/g, ""));
                 }
                 filterSets.filterStatus.add(job.status);
                 filterSets.filterLastRun.add(job.last_run || "Never");
@@ -640,60 +646,72 @@
                 filterSets.filterAvgExecTime.add(job.average_execution_time ? job.average_execution_time.toFixed(2) : "N/A");
             });
 
-            // Map each filter ID to its corresponding set, then populate the dropdown
-            Object.keys(filterSets).forEach(key => {
-                const select = document.getElementById(key);
-                if (select) {
-                    // Clear existing options and start with the default "All"
-                    select.innerHTML = `<option value="">All</option>`;
-                    filterSets[key].forEach(value => {
-                        const option = document.createElement("option");
-                        option.value = value;
-                        option.textContent = value;
-                        select.appendChild(option);
-                    });
-                }
+            // Populate the filter selects with options (starting with "All")
+            const filterIds = [
+                "filterID",
+                "filterName",
+                "filterSchedule",
+                "filterCommand",
+                "filterDependencies",
+                "filterStatus",
+                "filterLastRun",
+                "filterNextRun",
+                "filterRunCount",
+                "filterAvgExecTime"
+            ];
+            filterIds.forEach((id, index) => {
+                const select = document.getElementById(id);
+                select.innerHTML = `<option value="">All</option>`;
+                filterSets[id].forEach(value => {
+                    const option = document.createElement("option");
+                    option.value = value;
+                    option.textContent = value;
+                    select.appendChild(option);
+                });
             });
         }
 
         // Filtering function: uses the selected dropdown values from each inline filter row
         function filterJobs() {
-            const filterID = document.getElementById("filterID").value;
-            const filterName = document.getElementById("filterName").value;
-            const filterSchedule = document.getElementById("filterSchedule").value;
-            const filterCommand = document.getElementById("filterCommand").value;
-            const filterDependencies = document.getElementById("filterDependencies").value;
-            const filterStatus = document.getElementById("filterStatus").value;
-            const filterLastRun = document.getElementById("filterLastRun").value;
-            const filterNextRun = document.getElementById("filterNextRun").value;
-            const filterRunCount = document.getElementById("filterRunCount").value;
-            const filterAvgExecTime = document.getElementById("filterAvgExecTime").value;
-
-            const rows = document.querySelectorAll("#jobTableBody tr");
+            const filterID = document.getElementById("filterID").value.trim();
+            const filterName = document.getElementById("filterName").value.trim();
+            const filterSchedule = document.getElementById("filterSchedule").value.trim();
+            const filterCommand = document.getElementById("filterCommand").value.trim();
+            const filterDependencies = document.getElementById("filterDependencies").value.trim();
+            const filterStatus = document.getElementById("filterStatus").value.trim();
+            const filterLastRun = document.getElementById("filterLastRun").value.trim();
+            const filterNextRun = document.getElementById("filterNextRun").value.trim();
+            const filterRunCount = document.getElementById("filterRunCount").value.trim();
+            const filterAvgExecTime = document.getElementById("filterAvgExecTime").value.trim();
+    
+            // Only pick the main job rows (exclude logs rows)
+            const rows = document.querySelectorAll("#jobTableBody tr.job-row");
             rows.forEach(row => {
+                // Retrieve the normalized dependencies from the data attribute
+                const cellDependencies = row.cells[4].getAttribute("data-deps") || "";
                 const cellID = row.cells[0].textContent.trim();
                 const cellName = row.cells[1].textContent.trim();
                 const cellSchedule = row.cells[2].textContent.trim();
                 const cellCommand = row.cells[3].textContent.trim();
-                const cellDependencies = row.cells[4].textContent.trim();
                 const cellStatus = row.cells[5].textContent.trim();
                 const cellLastRun = row.cells[6].textContent.trim();
                 const cellNextRun = row.cells[7].textContent.trim();
                 const cellRunCount = row.cells[8].textContent.trim();
                 const cellAvgExecTime = row.cells[9].textContent.trim();
-
+    
                 const showRow =
                     (filterID === "" || cellID === filterID) &&
                     (filterName === "" || cellName === filterName) &&
                     (filterSchedule === "" || cellSchedule === filterSchedule) &&
                     (filterCommand === "" || cellCommand === filterCommand) &&
-                    (filterDependencies === "" || cellDependencies === filterDependencies) &&
+                    // Compare normalized dependency values exactly
+                    (filterDependencies === "" || cellDependencies === filterDependencies.replace(/\s/g, "")) &&
                     (filterStatus === "" || cellStatus === filterStatus) &&
                     (filterLastRun === "" || cellLastRun === filterLastRun) &&
                     (filterNextRun === "" || cellNextRun === filterNextRun) &&
                     (filterRunCount === "" || cellRunCount === filterRunCount) &&
                     (filterAvgExecTime === "" || cellAvgExecTime === filterAvgExecTime);
-                
+    
                 row.style.display = showRow ? "" : "none";
             });
         }
