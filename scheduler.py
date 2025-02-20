@@ -85,7 +85,7 @@ class JobScheduler:
                 parent_jobs = session.query(Job).filter(Job.id.in_(dependencies)).all()
                 incomplete_deps = [parent.name for parent in parent_jobs if parent.status != "complete"]
                 if incomplete_deps:
-                    logger.info(f"Job '{job.name}' is waiting for dependencies to complete: {', '.join(incomplete_deps)}.")
+                    #logger.debug(f"Job '{job.name}' is waiting for dependencies to complete: {', '.join(incomplete_deps)}.")
                     return
             
             # Execute the command
@@ -113,6 +113,21 @@ class JobScheduler:
             if result.returncode == 0:
                 job.status = "complete"
                 logger.info(f"Job '{job.name}' completed successfully.")
+                
+                # --- New code: Update all parent jobs ---
+                try:
+                    dependencies = json.loads(job.dependencies) if job.dependencies else []
+                except Exception as e:
+                    logger.error(f"Error parsing dependencies for job '{job.name}': {e}")
+                    dependencies = []
+                if dependencies:
+                    parent_jobs = session.query(Job).filter(Job.id.in_(dependencies)).all()
+                    for parent in parent_jobs:
+                        if parent.status == "complete":
+                            parent.status = "scheduled"
+                            logger.info(f"Parent job '{parent.name}' status updated from complete to scheduled.")
+                # --- End new code ---
+                
             else:
                 job.status = "failed"
                 logger.error(f"Job '{job.name}' failed with return code {result.returncode}.")
