@@ -215,6 +215,13 @@
             border-color: #80bdff;
             outline: none;
         }
+        select.filter {
+            width: 100%;
+            padding: 4px;
+            border: none;
+            border-radius: 2px;
+            font-size: 0.9rem;
+        }
     </style>
 </head>
 <body>
@@ -254,6 +261,7 @@
             <h2>Jobs</h2>
             <table>
                 <thead>
+                    <!-- Header Row: Column Names -->
                     <tr>
                         <th>ID</th>
                         <th>Name</th>
@@ -267,9 +275,55 @@
                         <th>Avg Execution Time</th>
                         <th>Actions</th>
                     </tr>
+                    <!-- Inline Filter Row: Dropdowns for each column (except Actions) -->
+                    <tr>
+                        <th><select id="filterID" class="filter" onchange="filterJobs()">
+                                <option value="">All</option>
+                            </select>
+                        </th>
+                        <th><select id="filterName" class="filter" onchange="filterJobs()">
+                                <option value="">All</option>
+                            </select>
+                        </th>
+                        <th><select id="filterSchedule" class="filter" onchange="filterJobs()">
+                                <option value="">All</option>
+                            </select>
+                        </th>
+                        <th><select id="filterCommand" class="filter" onchange="filterJobs()">
+                                <option value="">All</option>
+                            </select>
+                        </th>
+                        <th><select id="filterDependencies" class="filter" onchange="filterJobs()">
+                                <option value="">All</option>
+                            </select>
+                        </th>
+                        <th><select id="filterStatus" class="filter" onchange="filterJobs()">
+                                <option value="">All</option>
+                            </select>
+                        </th>
+                        <th><select id="filterLastRun" class="filter" onchange="filterJobs()">
+                                <option value="">All</option>
+                            </select>
+                        </th>
+                        <th><select id="filterNextRun" class="filter" onchange="filterJobs()">
+                                <option value="">All</option>
+                            </select>
+                        </th>
+                        <th><select id="filterRunCount" class="filter" onchange="filterJobs()">
+                                <option value="">All</option>
+                            </select>
+                        </th>
+                        <th><select id="filterAvgExecTime" class="filter" onchange="filterJobs()">
+                                <option value="">All</option>
+                            </select>
+                        </th>
+                        <th>
+                            <!-- Actions column is not filterable -->
+                        </th>
+                    </tr>
                 </thead>
                 <tbody id="jobTableBody">
-                    <!-- Jobs will be populated here -->
+                    <!-- Job rows will be populated here dynamically by loadJobs() -->
                 </tbody>
             </table>
         </div>
@@ -300,6 +354,38 @@
     <div id="toast" class="toast"></div>
 
     <script>
+        // Global variable to hold the fetched jobs array:
+        let jobsData = [];
+
+        // Updated formatLogs function to properly format log objects
+        function formatLogs(logs) {
+            // If logs is already an array, format each entry directly.
+            if (Array.isArray(logs)) {
+                return logs.map(entry => {
+                    return `Timestamp: ${entry.timestamp}\nSTDOUT: ${entry.stdout}\nSTDERR: ${entry.stderr}\nExecution Time: ${entry.execution_time}`;
+                }).join("\n--------------------------\n");
+            } 
+            // If logs is a string, try to parse it as JSON
+            else if (typeof logs === "string") {
+                try {
+                    const logsArray = JSON.parse(logs);
+                    if (Array.isArray(logsArray)) {
+                        return logsArray.map(entry => {
+                            return `Timestamp: ${entry.timestamp}\nSTDOUT: ${entry.stdout}\nSTDERR: ${entry.stderr}\nExecution Time: ${entry.execution_time}`;
+                        }).join("\n--------------------------\n");
+                    } else {
+                        // If it's not an array, output it as a formatted JSON string
+                        return JSON.stringify(logsArray, null, 2);
+                    }
+                } catch (e) {
+                    // If parsing fails, just return the raw string
+                    return logs;
+                }
+            }
+            // Fallback: stringify the logs object
+            return JSON.stringify(logs, null, 2);
+        }
+
         // Handle Logout
         function logout() {
             window.location.href = "/logout";
@@ -452,36 +538,43 @@
             loadJobs();
         }
 
-        // Load Jobs and Populate Table
+        // Fetch jobs from API and populate table rows, then build filter dropdown values
         function loadJobs() {
             fetch("/jobs")
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error("Network response was not ok");
-                    }
-                    return response.json();
-                })
+                .then(response => response.json())
                 .then(jobs => {
+                    jobsData = jobs; // save global copy for filtering dropdowns
                     const jobTableBody = document.getElementById("jobTableBody");
                     jobTableBody.innerHTML = "";
                     jobs.forEach(job => {
-                        const row = `<tr id="job-${job.id}">
+                        // Process dependencies (handle string vs. array)
+                        let deps = "";
+                        try {
+                            const parsedDeps = (typeof job.dependencies === "string") ? JSON.parse(job.dependencies) : job.dependencies;
+                            deps = Array.isArray(parsedDeps) ? parsedDeps.join(", ") : parsedDeps;
+                        } catch(e) {
+                            deps = job.dependencies;
+                        }
+                        
+                        // Create the main job row
+                        const row = document.createElement("tr");
+                        row.innerHTML = `
                             <td>${job.id}</td>
                             <td>${job.name}</td>
                             <td>${JSON.stringify(job.schedule)}</td>
                             <td>${job.command}</td>
-                            <td>${job.dependencies.join(", ")}</td>
+                            <td>${deps}</td>
                             <td>${job.status}</td>
                             <td>${job.last_run || "Never"}</td>
                             <td>${job.next_run || "N/A"}</td>
-                            <td>${job.run_count}</td>
-                            <td>${job.average_execution_time ? job.average_execution_time.toFixed(2) : 'N/A'}</td>
+                            <td>${job.run_count || 0}</td>
+                            <td>${job.average_execution_time ? job.average_execution_time.toFixed(2) : "N/A"}</td>
                             <td>
-                                <button class="btn-primary" onclick="runJob(${job.id})">Run Now</button>
-                                <button class="btn-edit" onclick="editJob(${job.id})">Edit</button>
-                                <button class="btn-danger" onclick="deleteJob(${job.id})">Delete</button>
+                                <button onclick="runJob(${job.id})" class="btn-primary">Run Now</button>
+                                <button onclick="editJob(${job.id})" class="btn-edit">Edit</button>
+                                <button onclick="deleteJob(${job.id})" class="btn-danger">Delete</button>
                                 <button onclick="toggleLogs(${job.id})">Toggle Logs</button>
-                                <button class="btn-danger" onclick="purgeLogs(${job.id})">Purge Logs</button>
+                                <button onclick="purgeLogs(${job.id})" class="btn-danger">Purge Logs</button>
                                 <select onchange="changeJobStatus(${job.id}, this.value)">
                                     <option value="">Set Status</option>
                                     <option value="scheduled" ${job.status === "scheduled" ? "selected" : ""}>Scheduled</option>
@@ -489,65 +582,144 @@
                                     <option value="inactive" ${job.status === "inactive" ? "selected" : ""}>Inactive</option>
                                 </select>
                             </td>
-                        </tr>
-                        <tr id="logs-${job.id}" class="logs" style="display: none;">
-                            <td colspan="12">
-                                <div id="runs-${job.id}">
-                                    ${parseLogs(job.logs).map((log, index) => `
-                                        <div class="run-container">
-                                            <button onclick="toggleRunDetails(${job.id}, ${index})">${log.timestamp}</button>
-                                            <button class="btn-danger" onclick="deleteLogEntry(${job.id}, ${index})">Delete</button>
-                                            <div id="run-${job.id}-${index}" class="run-details" style="display: none;">
-                                                <strong>STDOUT:</strong><br>${log.stdout || "N/A"}<br>
-                                                <strong>STDERR:</strong><br>${log.stderr || "N/A"}<br>
-                                                <strong>Execution Time:</strong> ${typeof log.execution_time === 'number' ? log.execution_time.toFixed(2) + " seconds" : "N/A"}<br>
-                                            </div>
-                                        </div>
-                                    `).join("")}
+                        `;
+                        jobTableBody.appendChild(row);
+                        
+                        // Create and append the logs row (hidden by default)
+                        const logsRow = document.createElement("tr");
+                        logsRow.id = "logs-" + job.id;
+                        logsRow.style.display = "none";
+                        logsRow.innerHTML = `
+                            <td colspan="11">
+                                <div class="logs">
+                                    ${ job.logs ? "<pre>" + formatLogs(job.logs) + "</pre>" : "No logs available" }
                                 </div>
                             </td>
-                        </tr>`;
-                        jobTableBody.insertAdjacentHTML('beforeend', row);
+                        `;
+                        jobTableBody.appendChild(logsRow);
                     });
+                    // After populating jobs, update the inline filter dropdowns
+                    populateInlineFiltersFromData(jobsData);
                 })
-                .catch(error => {
-                    console.error("Error loading jobs:", error);
-                    showToast("Error loading jobs", "error");
-                });
+                .catch(error => console.error("Error loading jobs:", error));
         }
 
-        // Parse Logs from JSON
-        function parseLogs(logs) {
-    if (!logs) {
-        return [];
-    }
-    try {
-        // Check if logs is already an array (already parsed JSON)
-                if (Array.isArray(logs)) {
-                    return logs.map(entry => ({
-                        timestamp: entry.timestamp || 'N/A',
-                        stdout: entry.stdout || '',
-                        stderr: entry.stderr || '',
-                        execution_time: entry.execution_time || 0
-                    }));
+        // Build the filter dropdown options from the fetched jobs data
+        function populateInlineFiltersFromData(jobs) {
+            // Create sets for each filterable column (using keys matching our select element IDs)
+            const filterSets = {
+                filterID: new Set(),
+                filterName: new Set(),
+                filterSchedule: new Set(),
+                filterCommand: new Set(),
+                filterDependencies: new Set(),
+                filterStatus: new Set(),
+                filterLastRun: new Set(),
+                filterNextRun: new Set(),
+                filterRunCount: new Set(),
+                filterAvgExecTime: new Set()
+            };
+
+            jobs.forEach(job => {
+                filterSets.filterID.add(String(job.id));
+                filterSets.filterName.add(job.name);
+                filterSets.filterSchedule.add(JSON.stringify(job.schedule));
+                filterSets.filterCommand.add(job.command);
+                // Handle dependencies (parse if necessary)
+                try {
+                    const parsedDeps = (typeof job.dependencies === "string") ? JSON.parse(job.dependencies) : job.dependencies;
+                    const depsStr = Array.isArray(parsedDeps) ? parsedDeps.join(", ") : parsedDeps;
+                    filterSets.filterDependencies.add(depsStr);
+                } catch (e) {
+                    filterSets.filterDependencies.add(job.dependencies);
                 }
-                // If it's a string, try to parse it
-                const logEntries = JSON.parse(logs);
-                return logEntries.map(entry => ({
-                    timestamp: entry.timestamp || 'N/A',
-                    stdout: entry.stdout || '',
-                    stderr: entry.stderr || '',
-                    execution_time: entry.execution_time || 0
-                }));
-            } catch (e) {
-                console.error("Error parsing logs:", e);
-                return [];
-            }
+                filterSets.filterStatus.add(job.status);
+                filterSets.filterLastRun.add(job.last_run || "Never");
+                filterSets.filterNextRun.add(job.next_run || "N/A");
+                filterSets.filterRunCount.add(job.run_count || "0");
+                filterSets.filterAvgExecTime.add(job.average_execution_time ? job.average_execution_time.toFixed(2) : "N/A");
+            });
+
+            // Map each filter ID to its corresponding set, then populate the dropdown
+            Object.keys(filterSets).forEach(key => {
+                const select = document.getElementById(key);
+                if (select) {
+                    // Clear existing options and start with the default "All"
+                    select.innerHTML = `<option value="">All</option>`;
+                    filterSets[key].forEach(value => {
+                        const option = document.createElement("option");
+                        option.value = value;
+                        option.textContent = value;
+                        select.appendChild(option);
+                    });
+                }
+            });
         }
-        // Toggle Logs Visibility
+
+        // Filtering function: uses the selected dropdown values from each inline filter row
+        function filterJobs() {
+            const filterID = document.getElementById("filterID").value;
+            const filterName = document.getElementById("filterName").value;
+            const filterSchedule = document.getElementById("filterSchedule").value;
+            const filterCommand = document.getElementById("filterCommand").value;
+            const filterDependencies = document.getElementById("filterDependencies").value;
+            const filterStatus = document.getElementById("filterStatus").value;
+            const filterLastRun = document.getElementById("filterLastRun").value;
+            const filterNextRun = document.getElementById("filterNextRun").value;
+            const filterRunCount = document.getElementById("filterRunCount").value;
+            const filterAvgExecTime = document.getElementById("filterAvgExecTime").value;
+
+            const rows = document.querySelectorAll("#jobTableBody tr");
+            rows.forEach(row => {
+                const cellID = row.cells[0].textContent.trim();
+                const cellName = row.cells[1].textContent.trim();
+                const cellSchedule = row.cells[2].textContent.trim();
+                const cellCommand = row.cells[3].textContent.trim();
+                const cellDependencies = row.cells[4].textContent.trim();
+                const cellStatus = row.cells[5].textContent.trim();
+                const cellLastRun = row.cells[6].textContent.trim();
+                const cellNextRun = row.cells[7].textContent.trim();
+                const cellRunCount = row.cells[8].textContent.trim();
+                const cellAvgExecTime = row.cells[9].textContent.trim();
+
+                const showRow =
+                    (filterID === "" || cellID === filterID) &&
+                    (filterName === "" || cellName === filterName) &&
+                    (filterSchedule === "" || cellSchedule === filterSchedule) &&
+                    (filterCommand === "" || cellCommand === filterCommand) &&
+                    (filterDependencies === "" || cellDependencies === filterDependencies) &&
+                    (filterStatus === "" || cellStatus === filterStatus) &&
+                    (filterLastRun === "" || cellLastRun === filterLastRun) &&
+                    (filterNextRun === "" || cellNextRun === filterNextRun) &&
+                    (filterRunCount === "" || cellRunCount === filterRunCount) &&
+                    (filterAvgExecTime === "" || cellAvgExecTime === filterAvgExecTime);
+                
+                row.style.display = showRow ? "" : "none";
+            });
+        }
+
+        // Function to toggle the display of logs for a given job ID
         function toggleLogs(jobId) {
-            const logsRow = document.getElementById(`logs-${jobId}`);
-            logsRow.style.display = logsRow.style.display === "none" ? "table-row" : "none";
+            const logsRow = document.getElementById("logs-" + jobId);
+            if (logsRow) {
+                // Find the inner logs container (the div with class "logs")
+                const logsDiv = logsRow.querySelector("div.logs");
+                if (logsRow.style.display === "none" || logsRow.style.display === "") {
+                    // Show the row as a table row and ensure the logs container is visible
+                    logsRow.style.display = "table-row";
+                    if (logsDiv) {
+                        logsDiv.style.display = "block";
+                    }
+                } else {
+                    // Hide both the row and its inner logs container
+                    logsRow.style.display = "none";
+                    if (logsDiv) {
+                        logsDiv.style.display = "none";
+                    }
+                }
+            } else {
+                console.error("Logs element not found for job id:", jobId);
+            }
         }
 
         // Toggle Run Details Visibility
@@ -619,7 +791,7 @@
             .catch(error => showToast("Error updating job status", "error"));
         }
 
-        // Call loadJobs on page load
+        // Initial load of jobs (which will then populate the filters)
         document.addEventListener("DOMContentLoaded", loadJobs);
     </script>
 

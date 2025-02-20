@@ -3,3 +3,5 @@ uvicorn==0.22.0
 APScheduler==3.9.1
 SQLAlchemy==1.4.48
 Jinja2==3.1.2
+passlib[bcrypt]
+apscheduler
