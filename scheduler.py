@@ -88,6 +88,9 @@ class JobScheduler:
                     #logger.debug(f"Job '{job.name}' is waiting for dependencies to complete: {', '.join(incomplete_deps)}.")
                     return
             
+            job.status = "running"
+            session.commit()
+
             # Execute the command
             start_time = datetime.datetime.utcnow()
             logger.info(f"Executing job '{job.name}' (ID: {job.id})...")
