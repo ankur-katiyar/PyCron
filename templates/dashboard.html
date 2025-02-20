@@ -6,28 +6,95 @@
     <title>Job Scheduler Dashboard</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            padding: 20px;
-            background: #e9ecef;
-            color: #343a40;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 0;
         }
-        h1, h2 {
-            color: #343a40;
-            text-align: center;
+        .header {
+            background-color: #007bff;
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            margin: 0;
+        }
+        .header button {
+            padding: 8px 12px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s ease, transform 0.2s ease;
+        }
+        .header button:hover {
+            background-color: #c82333;
+            transform: scale(1.05);
         }
         .container {
-            max-width: 1200px;
-            margin: auto;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+        .form-container, .table-container {
             background: #ffffff;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0px 0px 15px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0px 4px 12px rgba(0,0,0,0.1);
+        }
+        .form-container h2, .table-container h2 {
+            margin-top: 0;
+            color: #343a40;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: bold;
+            color: #343a40;
+        }
+        input[type="text"], select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 14px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus, select:focus {
+            border-color: #80bdff;
+            outline: none;
+        }
+        button {
+            padding: 10px 16px;
+            border: none;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-right: 8px;
+            transition: background 0.3s ease, transform 0.2s ease;
+        }
+        .btn-primary { background-color: #28a745; color: white; }
+        .btn-primary:hover { background-color: #218838; transform: scale(1.05); }
+        .btn-danger { background-color: #dc3545; color: white; }
+        .btn-danger:hover { background-color: #c82333; transform: scale(1.05); }
+        .btn-edit { background-color: #ffc107; color: black; }
+        .btn-edit:hover { background-color: #e0a800; transform: scale(1.05); }
+        .btn-reset {
+            background-color: #ffc107;
+        }
+        .btn-reset:hover {
+            background-color: #e0a800;
+            transform: scale(1.05);
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
+            margin-top: 10px;
         }
         th, td {
             border: 1px solid #dee2e6;
@@ -35,23 +102,17 @@
             text-align: left;
         }
         th {
-            background: #007bff;
+            background-color: #343a40;
             color: white;
+            position: sticky;
+            top: 0;
+            z-index: 1;
         }
         tr:nth-child(even) {
-            background: #f8f9fa;
+            background-color: #f8f9fa;
         }
-        button {
-            padding: 8px 12px;
-            border: none;
-            cursor: pointer;
-            border-radius: 5px;
-        }
-        .btn-primary { background: #28a745; color: white; }
-        .btn-danger { background: #dc3545; color: white; }
-        .btn-edit { background: #ffc107; color: black; }
-        button:hover {
-            opacity: 0.8;
+        tr:hover {
+            background-color: #e9ecef;
         }
         .logs {
             background: #f1f3f5;
@@ -60,6 +121,23 @@
             font-family: monospace;
             white-space: pre-wrap;
             overflow-x: auto;
+            display: none;
+        }
+        .run-container {
+            margin-bottom: 5px;
+            padding: 5px;
+            background: #e2e6ea;
+            border-radius: 4px;
+            box-shadow: 0px 2px 5px rgba(0,0,0,0.1);
+        }
+        .run-details {
+            display: none;
+            margin-top: 5px;
+            padding: 5px;
+            background: #ffffff;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-shadow: 0px 2px 5px rgba(0,0,0,0.1);
         }
         .modal {
             display: none;
@@ -69,139 +147,242 @@
             transform: translate(-50%, -50%);
             background: white;
             padding: 20px;
-            border-radius: 10px;
+            border-radius: 8px;
             box-shadow: 0px 0px 10px rgba(0,0,0,0.2);
-            width: 300px;
+            width: 400px;
+            z-index: 1000;
         }
         .toast {
+            visibility: hidden;
+            min-width: 250px;
+            margin-left: -125px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 4px;
+            padding: 16px;
             position: fixed;
-            top: 10px;
-            right: 10px;
-            background: green;
-            color: white;
-            padding: 10px;
-            border-radius: 5px;
-            z-index: 1000;
+            z-index: 9999;
+            left: 50%;
+            bottom: 30px;
+            font-size: 17px;
+        }
+        .toast.show {
+            visibility: visible;
+            -webkit-animation: fadein 0.5s, fadeout 0.5s 2.5s;
+            animation: fadein 0.5s, fadeout 0.5s 2.5s;
+        }
+        @-webkit-keyframes fadein {
+            from { bottom: 0; opacity: 0; }
+            to { bottom: 30px; opacity: 1; }
+        }
+        @keyframes fadein {
+            from { bottom: 0; opacity: 0; }
+            to { bottom: 30px; opacity: 1; }
+        }
+        @-webkit-keyframes fadeout {
+            from { bottom: 30px; opacity: 1; }
+            to { bottom: 0; opacity: 0; }
+        }
+        @keyframes fadeout {
+            from { bottom: 30px; opacity: 1; }
+            to { bottom: 0; opacity: 0; }
+        }
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            th, td {
+                padding: 8px;
+            }
+            button {
+                padding: 8px 12px;
+                font-size: 14px;
+            }
+            .modal {
+                width: 90%;
+            }
+        }
+        /* Add styles for the dropdown */
+        select {
+            padding: 6px;
+            border-radius: 4px;
+            border: 1px solid #ced4da;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+        select:focus {
+            border-color: #80bdff;
+            outline: none;
         }
     </style>
 </head>
 <body>
 
-    <div class="container">
+    <div class="header">
         <h1>Job Scheduler Dashboard</h1>
-        
-        <h2>Add Job</h2>
-        <form id="jobform">
-            <label for="name">Job Name:</label>
-            <input type="text" id="name" name="name" placeholder="Enter job name" required>
-            
-            <label for="schedule">Schedule (Cron JSON):</label>
-            <input type="text" id="schedule" name="schedule" placeholder='{"minute": "*/5"}' required>
-            
-            <label for="command">Command:</label>
-            <input type="text" id="command" name="command" placeholder="Enter command" required>
-            
-            <label for="dependencies">Dependencies (Comma separated job IDs):</label>
-            <input type="text" id="dependencies" name="dependencies" placeholder="e.g., 1,2,3">
-            
-            <button type="button" class="btn-primary" onclick="submitJob()">Submit</button>
-        </form>
-
-        <h2>Jobs</h2>
-        <button class="btn-primary" onclick="refreshJobs()">Refresh</button>
-        <table>
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Name</th>
-                    <th>Schedule</th>
-                    <th>Command</th>
-                    <th>Dependencies</th>
-                    <th>Status</th>
-                    <th>Last Run</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="jobTableBody">
-                <!-- Jobs will be loaded here -->
-            </tbody>
-        </table>
+        <div>
+            <button onclick="refreshDashboard()">Refresh</button>
+            <button onclick="logout()">Logoff</button>
+        </div>
     </div>
 
-    <div id="editModal" class="modal">
+    <div class="container">
+        <!-- Add Job Form -->
+        <div class="form-container">
+            <h2>Add Job</h2>
+            <form id="jobform">
+                <label for="name">Job Name:</label>
+                <input type="text" id="name" name="name" placeholder="Enter job name" required>
+                
+                <label for="schedule">Schedule (Cron JSON):</label>
+                <input type="text" id="schedule" name="schedule" placeholder='{"hour": "8", "minute": "0"}' required>
+                
+                <label for="command">Command:</label>
+                <input type="text" id="command" name="command" placeholder="Enter command" required>
+                
+                <label for="dependencies">Dependencies (Comma separated job IDs):</label>
+                <input type="text" id="dependencies" name="dependencies" placeholder="e.g., 1,2,3">
+                
+                <button type="button" class="btn-primary" onclick="submitJob()">Submit</button>
+                <button type="button" class="btn-refresh" onclick="loadJobs()">Refresh</button>
+            </form>
+        </div>
+
+        <!-- Job Table -->
+        <div class="table-container">
+            <h2>Jobs</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Schedule</th>
+                        <th>Command</th>
+                        <th>Dependencies</th>
+                        <th>Status</th>
+                        <th>Last Run</th>
+                        <th>Next Run</th>
+                        <th>Run Count</th>
+                        <th>Avg Execution Time</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="jobTableBody">
+                    <!-- Jobs will be populated here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div class="modal" id="editModal">
         <h2>Edit Job</h2>
-        <label>Job Name:</label>
-        <input type="text" id="editName">
-        
-        <label>Schedule:</label>
-        <input type="text" id="editSchedule">
-        
-        <label>Command:</label>
-        <input type="text" id="editCommand">
-        
-        <label>Dependencies:</label>
-        <input type="text" id="editDependencies">
-        
-        <button class="btn-primary" onclick="submitJobUpdate()">Update Job</button>
-        <button class="btn-danger" onclick="closeModal()">Cancel</button>
+        <form id="editJobForm">
+            <label for="editName">Job Name:</label>
+            <input type="text" id="editName" name="editName" required>
+            
+            <label for="editSchedule">Schedule (Cron JSON):</label>
+            <input type="text" id="editSchedule" name="editSchedule" required>
+            
+            <label for="editCommand">Command:</label>
+            <input type="text" id="editCommand" name="editCommand" required>
+            
+            <label for="editDependencies">Dependencies (Comma separated job IDs):</label>
+            <input type="text" id="editDependencies" name="editDependencies">
+            
+            <button type="button" class="btn-primary" onclick="submitJobUpdate()">Update</button>
+            <button type="button" class="btn-danger" onclick="closeModal()">Cancel</button>
+        </form>
     </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
 
     <script>
-        function showToast(message, type = "success") {
-            let color = type === "success" ? "green" : "red";
-            let toast = document.createElement("div");
-            toast.className = "toast";
-            toast.style.background = color;
-            toast.innerText = message;
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 3000);
+        // Handle Logout
+        function logout() {
+            window.location.href = "/logout";
         }
 
+        // Submit New Job
         function submitJob() {
-            const data = {
-                name: document.getElementById("name").value,
-                schedule: document.getElementById("schedule").value,
-                command: document.getElementById("command").value,
-                dependencies: document.getElementById("dependencies").value.split(",").map(s => s.trim()).filter(s => s)
-            };
-            
+            const name = document.getElementById("name").value.trim();
+            const schedule = document.getElementById("schedule").value.trim();
+            const command = document.getElementById("command").value.trim();
+            const dependencies = document.getElementById("dependencies").value
+                .split(",")
+                .map(s => s.trim())
+                .filter(s => s.length > 0)
+                .map(s => parseInt(s))
+                .filter(s => !isNaN(s));
+
+            const jobData = { name, schedule, command, dependencies };
+
             // Validate schedule JSON
             try {
-                JSON.parse(data.schedule);
+                JSON.parse(schedule);
             } catch (e) {
-                showToast("Invalid schedule format", "error");
+                showToast("Invalid schedule format. Please enter valid JSON.", "error");
                 return;
             }
-            
-            fetch("/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
+
+            fetch("/jobs", { 
+                method: "POST", 
+                headers: { "Content-Type": "application/json" }, 
+                body: JSON.stringify(jobData) 
+            })
                 .then(response => {
                     if (!response.ok) {
-                        return response.json().then(err => { throw new Error(err.detail); });
+                        return response.json().then(err => { throw err; });
                     }
                     return response.json();
                 })
-                .then(() => { showToast("Job added successfully!"); location.reload(); })
-                .catch(error => showToast(`Error adding job: ${error.message}`, "error"));
+                .then(data => { 
+                    showToast("Job added successfully!", "success"); 
+                    loadJobs(); 
+                    document.getElementById("jobform").reset(); 
+                })
+                .catch(error => showToast(`Error adding job: ${error.detail || "Unknown error"}`, "error"));
         }
 
+        // Run Job Ad-Hoc
         function runJob(jobId) {
             fetch(`/jobs/${jobId}/run`, { method: "POST" })
-                .then(response => response.json())
-                .then(() => showToast("Job run successfully!"))
-                .catch(error => showToast("Error running job", "error"));
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw err; });
+                    }
+                    return response.json();
+                })
+                .then(() => { showToast("Job run successfully!", "success"); loadJobs(); })
+                .catch(error => showToast(`Error running job: ${error.detail || "Unknown error"}`, "error"));
         }
 
+        // Delete Job
         function deleteJob(jobId) {
             if (!confirm(`Are you sure you want to delete job ${jobId}?`)) return;
             
             fetch(`/jobs/${jobId}`, { method: "DELETE" })
-                .then(() => { showToast("Job deleted!", "error"); document.getElementById(`job-${jobId}`).remove(); })
-                .catch(error => showToast("Error deleting job", "error"));
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw err; });
+                    }
+                    return response.json();
+                })
+                .then(() => { showToast("Job deleted!", "success"); loadJobs(); })
+                .catch(error => showToast(`Error deleting job: ${error.detail || "Unknown error"}`, "error"));
         }
 
+        // Edit Job
         function editJob(jobId) {
             fetch(`/jobs/${jobId}`)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw err; });
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     document.getElementById("editName").value = data.name;
                     document.getElementById("editSchedule").value = data.schedule;
@@ -210,43 +391,70 @@
                     document.getElementById("editModal").style.display = "block";
                     document.getElementById("editModal").dataset.jobId = jobId;
                 })
-                .catch(error => showToast("Error fetching job details", "error"));
+                .catch(error => showToast(`Error fetching job details: ${error.detail || "Unknown error"}`, "error"));
         }
 
+        // Submit Job Update
         function submitJobUpdate() {
             const jobId = document.getElementById("editModal").dataset.jobId;
-            const data = {
-                name: document.getElementById("editName").value,
-                schedule: document.getElementById("editSchedule").value,
-                command: document.getElementById("editCommand").value,
-                dependencies: document.getElementById("editDependencies").value.split(",").map(s => s.trim())
-            };
+            const name = document.getElementById("editName").value.trim();
+            const schedule = document.getElementById("editSchedule").value.trim();
+            const command = document.getElementById("editCommand").value.trim();
+            const dependencies = document.getElementById("editDependencies").value
+                .split(",")
+                .map(s => s.trim())
+                .filter(s => s.length > 0)
+                .map(s => parseInt(s))
+                .filter(s => !isNaN(s));
+
+            const jobData = { name, schedule, command, dependencies };
 
             // Validate schedule JSON
             try {
-                JSON.parse(data.schedule);
+                JSON.parse(schedule);
             } catch (e) {
-                showToast("Invalid schedule format", "error");
+                showToast("Invalid schedule format. Please enter valid JSON.", "error");
                 return;
             }
 
-            fetch(`/jobs/${jobId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
-                .then(response => response.json())
-                .then(() => { showToast("Job updated successfully!"); location.reload(); })
-                .catch(error => showToast("Error updating job", "error"));
+            fetch(`/jobs/${jobId}`, { 
+                method: "PUT", 
+                headers: { "Content-Type": "application/json" }, 
+                body: JSON.stringify(jobData) 
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw err; });
+                    }
+                    return response.json();
+                })
+                .then(() => { 
+                    showToast("Job updated successfully!", "success"); 
+                    loadJobs(); 
+                    closeModal(); 
+                })
+                .catch(error => showToast(`Error updating job: ${error.detail || "Unknown error"}`, "error"));
         }
 
+        // Close Edit Modal
         function closeModal() {
             document.getElementById("editModal").style.display = "none";
         }
 
+        // Refresh Jobs
         function refreshJobs() {
             loadJobs();
         }
 
+        // Load Jobs and Populate Table
         function loadJobs() {
             fetch("/jobs")
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error("Network response was not ok");
+                    }
+                    return response.json();
+                })
                 .then(jobs => {
                     const jobTableBody = document.getElementById("jobTableBody");
                     jobTableBody.innerHTML = "";
@@ -259,19 +467,141 @@
                             <td>${job.dependencies.join(", ")}</td>
                             <td>${job.status}</td>
                             <td>${job.last_run || "Never"}</td>
+                            <td>${job.next_run || "N/A"}</td>
+                            <td>${job.run_count}</td>
+                            <td>${job.average_execution_time.toFixed(2)}</td>
                             <td>
                                 <button class="btn-primary" onclick="runJob(${job.id})">Run Now</button>
                                 <button class="btn-edit" onclick="editJob(${job.id})">Edit</button>
                                 <button class="btn-danger" onclick="deleteJob(${job.id})">Delete</button>
+                                <button onclick="toggleLogs(${job.id})">Toggle Logs</button>
+                                <button class="btn-danger" onclick="purgeLogs(${job.id})">Purge Logs</button>
+                                <select onchange="changeJobStatus(${job.id}, this.value)">
+                                    <option value="">Set Status</option>
+                                    <option value="scheduled" ${job.status === "scheduled" ? "selected" : ""}>Scheduled</option>
+                                    <option value="complete" ${job.status === "complete" ? "selected" : ""}>Complete</option>
+                                    <option value="inactive" ${job.status === "inactive" ? "selected" : ""}>Inactive</option>
+                                </select>
                             </td>
                         </tr>
-                        <tr>
-                            <td colspan="8"><pre class="logs">${job.logs}</pre></td>
+                        <tr id="logs-${job.id}" class="logs" style="display: none;">
+                            <td colspan="12">
+                                <div id="runs-${job.id}">
+                                    ${parseLogs(job.logs).map((log, index) => `
+                                        <div class="run-container">
+                                            <button onclick="toggleRunDetails(${job.id}, ${index})">${log.timestamp}</button>
+                                            <button class="btn-danger" onclick="deleteLogEntry(${job.id}, ${index})">Delete</button>
+                                            <div id="run-${job.id}-${index}" class="run-details" style="display: none;">
+                                                <strong>STDOUT:</strong><br>${log.stdout || "N/A"}<br>
+                                                <strong>STDERR:</strong><br>${log.stderr || "N/A"}<br>
+                                                <strong>Execution Time:</strong> ${typeof log.execution_time === 'number' ? log.execution_time.toFixed(2) + " seconds" : "N/A"}<br>
+                                            </div>
+                                        </div>
+                                    `).join("")}
+                                </div>
+                            </td>
                         </tr>`;
                         jobTableBody.insertAdjacentHTML('beforeend', row);
                     });
                 })
-                .catch(error => showToast("Error loading jobs", "error"));
+                .catch(error => {
+                    console.error("Error loading jobs:", error);
+                    showToast("Error loading jobs", "error");
+                });
+        }
+
+        // Parse Logs from JSON
+        function parseLogs(logs) {
+            if (!logs) {
+                return [];
+            }
+            try {
+                const logEntries = JSON.parse(logs);
+                return logEntries.map(entry => ({
+                    timestamp: entry.timestamp,
+                    stdout: entry.stdout,
+                    stderr: entry.stderr,
+                    execution_time: entry.execution_time
+                }));
+            } catch (e) {
+                console.error("Error parsing logs:", e);
+                return [];
+            }
+        }
+
+        // Toggle Logs Visibility
+        function toggleLogs(jobId) {
+            const logsRow = document.getElementById(`logs-${jobId}`);
+            logsRow.style.display = logsRow.style.display === "none" ? "table-row" : "none";
+        }
+
+        // Toggle Run Details Visibility
+        function toggleRunDetails(jobId, runIndex) {
+            const runDetails = document.getElementById(`run-${jobId}-${runIndex}`);
+            if (runDetails) {
+                runDetails.style.display = runDetails.style.display === "none" ? "block" : "none";
+            }
+        }
+
+        // Delete Log Entry
+        function deleteLogEntry(jobId, logIndex) {
+            fetch(`/jobs/${jobId}/logs/${logIndex}`, { method: "DELETE" })
+                .then(response => response.json())
+                .then(data => {
+                    showToast(data.message, "success");
+                    loadJobs();
+                })
+                .catch(error => {
+                    console.error("Error deleting log entry:", error);
+                    showToast("Error deleting log entry", "error");
+                });
+        }
+
+        // Purge Logs
+        function purgeLogs(jobId) {
+            fetch(`/jobs/${jobId}/purge_logs`, { method: "POST" })
+                .then(response => response.json())
+                .then(data => {
+                    showToast(data.message, "success");
+                    loadJobs();
+                })
+                .catch(error => {
+                    console.error("Error purging logs:", error);
+                    showToast("Error purging logs", "error");
+                });
+        }
+
+        // Show Toast Notification
+        function showToast(message, type = "info") {
+            const toast = document.getElementById("toast");
+            toast.className = "toast show";
+            toast.textContent = message;
+            setTimeout(() => {
+                toast.className = toast.className.replace("show", "");
+            }, 3000);
+        }
+
+        // Change Job Status
+        function changeJobStatus(jobId, newStatus) {
+            if (!newStatus) return; // Do nothing if no status is selected
+
+            fetch(`/jobs/${jobId}/status`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ status: newStatus })
+            })
+            .then(response => response.json())
+            .then(data => { 
+                if (data.message) {
+                    showToast(data.message, "success"); 
+                    loadJobs();
+                } else {
+                    showToast(data.detail || "Failed to update job status.", "error");
+                }
+            })
+            .catch(error => showToast("Error updating job status", "error"));
         }
 
         // Call loadJobs on page load
