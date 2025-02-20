@@ -333,4 +333,10 @@ def update_job(job_id: int, job: JobUpdateModel, user: User = Depends(require_au
     session.refresh(existing_job)
     session.close()
     
-    return {"message": f"Job '{existing_job.name}' updated successfully.", "job_id": existing_job.id}
+    # Recalculate the next run by rescheduling the job
+    job_scheduler.schedule_job(existing_job)
+    
+    return {
+        "message": f"Job '{existing_job.name}' updated successfully, next run recalculated.",
+        "job_id": existing_job.id
+    }
