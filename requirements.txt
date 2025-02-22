@@ -24,3 +24,5 @@ typing_extensions==4.12.2
 tzdata==2025.1
 tzlocal==5.3
 uvicorn==0.22.0
+python-jose[cryptography]
+pyjwt==2.10.0

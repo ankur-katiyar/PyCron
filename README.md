@@ -480,3 +480,16 @@ The following environment variables can be configured in the deployment:
 Update these in the `deployment.yaml` file under the `env` section of the container spec.
 
 ---
+
+# React App
+
+```bash
+npx create-react-app job-scheduler-react
+cd job-scheduler-react
+npm install axios react-router-dom @mui/material @emotion/react @emotion/styled framer-motion
+```
+
+
+
+
+

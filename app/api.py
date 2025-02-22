@@ -6,6 +6,10 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
 
 import logging
 from threading import Thread
@@ -17,6 +21,15 @@ from passlib.context import CryptContext
 
 # Configure FastAPI app
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Allow React app
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods
+    allow_headers=["*"],  # Allow all headers
+)
 
 # Add session middleware with environment variable
 app.add_middleware(SessionMiddleware, secret_key=os.environ.get("SECRET_KEY", "default-secret-key"))
@@ -40,12 +53,23 @@ class JobModel(BaseModel):
     command: str
     dependencies: list[int] = []  # List of job IDs
 
-# Dependency for authentication
-def require_authentication(request: Request):
-    user = request.session.get("user")
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    return user
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/login")
+
+def require_authentication(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token",
+            )
+        return username
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        )
 
 # Health Check Endpoint
 @app.get("/health")
@@ -85,7 +109,7 @@ def dashboard(request: Request, user: User = Depends(require_authentication)):
 
 # Route: Create Job
 @app.post("/jobs")
-def create_job(job: JobModel, user: User = Depends(require_authentication)):
+def create_job(job: JobModel, user: str = Depends(require_authentication)):
     session = SessionLocal()
     existing_job = session.query(Job).filter(Job.name == job.name).first()
     if existing_job:
@@ -112,7 +136,7 @@ def create_job(job: JobModel, user: User = Depends(require_authentication)):
 
 # Route: Get All Jobs
 @app.get("/jobs")
-def get_jobs(user: User = Depends(require_authentication)):
+def get_jobs(user: str = Depends(require_authentication)):
     session = SessionLocal()
     jobs = session.query(Job).all()
     job_list = []
@@ -131,20 +155,21 @@ def get_jobs(user: User = Depends(require_authentication)):
             "dependencies": json.loads(job.dependencies),
             "status": job.status,
             "last_run": job.last_run.isoformat() if job.last_run else None,
-            "logs": logs,  # Already parsed JSON
-            "run_count": len(logs)
+            "logs": logs,
+            "run_count": len(logs),
         }
-        
+
         # Calculate average execution time
         execution_times = [log.get('execution_time') for log in logs 
-                         if isinstance(log.get('execution_time'), (int, float))]
+                          if isinstance(log.get('execution_time'), (int, float))]
         job_data["average_execution_time"] = (
             sum(execution_times) / len(execution_times) if execution_times else 0
         )
-        
-        # get next run time from scheduler
+
+        # Get next run time from scheduler
         next_run = job_scheduler.get_next_run_time(job.id)
         job_data["next_run"] = next_run
+
         job_list.append(job_data)
     
     session.close()
@@ -304,7 +329,20 @@ def get_job(job_id: int):
         job = session.query(Job).filter(Job.id == job_id).first()
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
-        return job
+        
+        # Convert dependencies from JSON string to list
+        dependencies = json.loads(job.dependencies) if job.dependencies else []
+        
+        return {
+            "id": job.id,
+            "name": job.name,
+            "schedule": job.schedule,
+            "command": job.command,
+            "dependencies": dependencies,
+            "status": job.status,
+            "last_run": job.last_run.isoformat() if job.last_run else None,
+            "logs": json.loads(job.logs) if job.logs else [],
+        }
     except Exception as e:
         logger.error(f"Error fetching job details for ID {job_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
@@ -320,28 +358,64 @@ class JobUpdateModel(BaseModel):
 
 # Route: Update Job
 @app.put("/jobs/{job_id}")
-def update_job(job_id: int, job: JobUpdateModel, user: User = Depends(require_authentication)):
+def update_job(job_id: int, job: JobModel, user: str = Depends(require_authentication)):
     session = SessionLocal()
     existing_job = session.query(Job).filter(Job.id == job_id).first()
-    
     if not existing_job:
         session.close()
         raise HTTPException(status_code=404, detail="Job not found.")
     
-    # Update job attributes
     existing_job.name = job.name
-    existing_job.schedule = job.schedule  # Assuming this is a valid JSON string
+    existing_job.schedule = job.schedule
     existing_job.command = job.command
-    existing_job.dependencies = json.dumps(job.dependencies)  # Convert list to JSON string
-
+    existing_job.dependencies = json.dumps(job.dependencies)
+    
     session.commit()
     session.refresh(existing_job)
     session.close()
     
-    # Recalculate the next run by rescheduling the job
+    # Update the job in the scheduler
     job_scheduler.schedule_job(existing_job)
     
-    return {
-        "message": f"Job '{existing_job.name}' updated successfully, next run recalculated.",
-        "job_id": existing_job.id
+    logger.info(f"Job '{existing_job.name}' (ID: {existing_job.id}) updated.")
+    return {"message": f"Job '{existing_job.name}' updated successfully."}
+
+# Mock user database
+fake_users_db = {
+    "admin": {
+        "username": "admin",
+        "password": "password",  # In a real app, use hashed passwords
     }
+}
+
+# Secret key for JWT
+SECRET_KEY = "your-secret-key"  # Replace with a secure secret key
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+# New endpoint for React login
+@app.post("/api/login", response_model=Token)
+async def react_login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = fake_users_db.get(form_data.username)
+    if not user or user["password"] != form_data.password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+        )
+
+    # Create a JWT token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = jwt.encode(
+        {
+            "sub": user["username"],
+            "exp": datetime.utcnow() + access_token_expires,
+        },
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+
+    return {"access_token": access_token, "token_type": "bearer"}
