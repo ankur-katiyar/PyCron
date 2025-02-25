@@ -58,15 +58,17 @@ const Dashboard = () => {
   return (
     <div className="dashboard">
       <Sidebar />
-      <div className="job-grid">
-        {jobs.map((job) => (
-          <JobCard
-            key={job.id}
-            job={job}
-            onClick={() => setSelectedJob(job)}
-            onDelete={handleDeleteJob}
-          />
-        ))}
+      <div className="job-grid-container">
+        <div className="job-grid">
+          {jobs.map((job) => (
+            <JobCard
+              key={job.id}
+              job={job}
+              onClick={() => setSelectedJob(job)}
+              onDelete={handleDeleteJob}
+            />
+          ))}
+        </div>
       </div>
       {selectedJob && (
         <JobDetailsModal
