@@ -95,23 +95,34 @@ const JobCard = ({ job, onClick, onDelete }) => {
     navigate(`/logs/${job.id}`); // Navigate to the logs page
   };
 
+  // Get the color for the job card based on the status
+  const getJobCardColor = (status) => {
+    switch (status) {
+      case "running":
+        return "#2e7d32"; // Darker green for running
+      default:
+        return "#2d2d2d"; // Default color for other statuses
+    }
+  };
+
   // Get the color for the status dropdown
   const getStatusColor = (status) => {
     switch (status) {
       case "scheduled":
-        return "#4caf50"; // Green
+        return "#ff9800"; // Amber for scheduled
       case "inactive":
-        return "#b0b0b0"; // Grey
+        return "#b0b0b0"; // Grey for inactive
       case "complete":
-        return "#2196f3"; // Blue
+        return "#2196f3"; // Blue for complete
       default:
-        return "#ffffff"; // White
+        return "#ffffff"; // White for other statuses
     }
   };
 
   return (
     <motion.div
       className="job-card"
+      style={{ backgroundColor: getJobCardColor(job.status) }} // Apply job card color
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
     >

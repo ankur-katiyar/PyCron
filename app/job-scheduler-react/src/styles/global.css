@@ -35,6 +35,10 @@ body {
   gap: 4px;
 }
 
+.job-card.running {
+  background-color: #4caf50;
+}
+
 .job-card:hover {
   transform: translateY(-2px);
 }
@@ -476,6 +480,10 @@ body {
 .status-select:focus {
   outline: none;
   border-color: #888;
+}
+
+.status-select.scheduled {
+  background-color: #ff9800; /* Amber for scheduled */
 }
 
 .settings-container {
