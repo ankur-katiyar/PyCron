@@ -196,36 +196,27 @@ def delete_job(job_id: int, user: User = Depends(require_authentication)):
 
 # Route: Run Job Ad-Hoc
 @app.post("/jobs/{job_id}/run")
-def run_job_adhoc(job_id: int, user: User = Depends(require_authentication)):
+def run_job_adhoc(job_id: int, user: str = Depends(require_authentication)):
     session = SessionLocal()
     job = session.query(Job).filter(Job.id == job_id).first()
     if not job:
         session.close()
-        return {"message": f"Job '{job.name}' is inactive and cannot be run."}
+        raise HTTPException(status_code=404, detail="Job not found.")
     
-    if job.status == "inactive":
+    try:
+        # Trigger the job execution
+        rc,message = job_scheduler.run_job(job.id)
+        if rc != 0:
+            return {"message": f"Job ID {job_id} execution failed: {message}."}
+        #session.close()
+        logger.info(f"Job '{job.name}' (ID: {job.id}) executed ad-hoc.")
+        return {"message": f"Job '{job.name}' executed successfully."}
+    except Exception as e:
         session.close()
-        raise HTTPException(status_code=400, detail="Job is inactive and cannot be run.")
-    
-    # Check dependencies
-    dependencies = json.loads(job.dependencies) if job.dependencies else []
-    if dependencies:
-        parent_jobs = session.query(Job).filter(Job.id.in_(dependencies)).all()
-        incomplete_deps = [parent.name for parent in parent_jobs if parent.status != "complete"]
-        if incomplete_deps:
-            session.close()
-            raise HTTPException(status_code=400, detail=f"Dependencies not complete: {', '.join(incomplete_deps)}.")
-    
-    job.status = "running"
-    session.commit()
-    #session.close()
-    # Run the job in a separate thread to avoid blocking
-
-    thread = Thread(target=job_scheduler.run_job, args=(job_id,))
-    thread.start()
-
-    logger.info(f"Job '{job.name}' (ID: {job.id}) triggered ad-hoc.")
-    return {"message": f"Job '{job.name}' triggered successfully."}
+        logger.error(f"Error running job ad-hoc: {e}")
+        raise HTTPException(status_code=500, detail="Failed to run job.")
+    finally:
+        session.close()
 
 # Route: Update Job Status
 @app.put("/jobs/{job_id}/status")
@@ -419,3 +410,18 @@ async def react_login(form_data: OAuth2PasswordRequestForm = Depends()):
     )
 
     return {"access_token": access_token, "token_type": "bearer"}
+
+@app.delete("/jobs/{job_id}/logs")
+def purge_job_logs(job_id: int, user: str = Depends(require_authentication)):
+    session = SessionLocal()
+    job = session.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        session.close()
+        raise HTTPException(status_code=404, detail="Job not found.")
+    
+    job.logs = "[]"  # Clear the logs
+    session.commit()
+    session.close()
+    
+    logger.info(f"Logs for job '{job.name}' (ID: {job.id}) purged.")
+    return {"message": f"Logs for job '{job.name}' purged successfully."}

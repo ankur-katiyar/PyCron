@@ -4,6 +4,7 @@ import { fetchJobs, deleteJob } from "../api/jobService";
 import Sidebar from "../components/Sidebar";
 import JobCard from "../components/JobCard";
 import JobDetailsModal from "../components/JobDetailsModal";
+import { toast } from "react-hot-toast";
 
 const Dashboard = () => {
   const [jobs, setJobs] = useState([]);
@@ -33,6 +34,26 @@ const Dashboard = () => {
   const handleDeleteJob = (jobId) => {
     setJobs((prevJobs) => prevJobs.filter((job) => job.id !== jobId));
   };
+
+  const fetchJobsData = async () => {
+    try {
+      const jobs = await fetchJobs();
+      setJobs(jobs);
+    } catch (error) {
+      console.error("Error fetching jobs:", error);
+      toast.error("Failed to fetch jobs.");
+    }
+  };
+
+  useEffect(() => {
+    fetchJobsData(); // Initial fetch
+
+    const interval = setInterval(() => {
+      fetchJobsData(); // Periodic fetch
+    }, localStorage.getItem("refreshInterval") * 1000 || 10000); // Default to 10 seconds
+
+    return () => clearInterval(interval); // Cleanup on unmount
+  }, []);
 
   return (
     <div className="dashboard">

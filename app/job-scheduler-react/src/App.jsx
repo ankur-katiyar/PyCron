@@ -1,10 +1,12 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import CreateJob from "./pages/CreateJob";
 import EditJob from "./pages/EditJob";
 import Settings from "./pages/Settings";
+import LogsPage from "./pages/LogsPage";
+import SettingsPage from "./pages/SettingsPage";
 import "./styles/global.css";
 import "./styles/theme.css";
 
@@ -19,6 +21,10 @@ function App() {
       <Routes>
         <Route
           path="/"
+          element={isAuthenticated() ? <Navigate to="/dashboard" /> : <Login />}
+        />
+        <Route
+          path="/dashboard"
           element={isAuthenticated() ? <Dashboard /> : <Navigate to="/login" />}
         />
         <Route path="/login" element={<Login />} />
@@ -32,7 +38,11 @@ function App() {
         />
         <Route
           path="/settings"
-          element={isAuthenticated() ? <Settings /> : <Navigate to="/login" />}
+          element={isAuthenticated() ? <SettingsPage /> : <Navigate to="/login" />}
+        />
+        <Route
+          path="/logs/:id"
+          element={isAuthenticated() ? <LogsPage /> : <Navigate to="/login" />}
         />
       </Routes>
     </Router>

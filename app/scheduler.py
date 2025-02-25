@@ -72,12 +72,12 @@ class JobScheduler:
             job = session.query(Job).filter(Job.id == job_id).first()
             if not job:
                 logger.error(f"Job with ID {job_id} not found.")
-                return
+                return 8,"Job not found"
             
             # Check if job is inactive
             if job.status == "inactive":
                 logger.info(f"Job '{job.name}' is inactive. Skipping execution.")
-                return
+                return 8,"Job is inactive"
             
             # Check dependencies
             dependencies = json.loads(job.dependencies) if job.dependencies else []
@@ -85,8 +85,8 @@ class JobScheduler:
                 parent_jobs = session.query(Job).filter(Job.id.in_(dependencies)).all()
                 incomplete_deps = [parent.name for parent in parent_jobs if parent.status != "complete"]
                 if incomplete_deps:
-                    #logger.debug(f"Job '{job.name}' is waiting for dependencies to complete: {', '.join(incomplete_deps)}.")
-                    return
+                    logger.debug(f"Job '{job.name}' is waiting for dependencies to complete: {', '.join(incomplete_deps)}.")
+                    return 8,"Dependencies not complete"
             
             job.status = "running"
             session.commit()
@@ -111,7 +111,7 @@ class JobScheduler:
                 job.logs = json.dumps(logs)
             else:
                 logger.error(f"Invalid execution_time for job '{job.name}' (ID: {job.id}): {execution_time}")
-            
+                return 8,"Invalid execution_time"
             # Update job status based on execution result
             if result.returncode == 0:
                 job.status = "complete"
@@ -134,15 +134,18 @@ class JobScheduler:
             else:
                 job.status = "failed"
                 logger.error(f"Job '{job.name}' failed with return code {result.returncode}.")
+                return 8,"Job failed"
             
             job.last_run = end_time
             session.commit()
             logger.info(f"Job '{job.name}' (ID: {job.id}) status updated to '{job.status}'.")
+            return 0,"Job completed"
         except Exception as e:
             logger.error(f"Error executing job '{job.name}': {e}")
             if job:
                 job.status = "failed"
                 session.commit()
+            return 8,"Job failed"
         finally:
             session.close()
     
