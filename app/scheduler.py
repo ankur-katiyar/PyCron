@@ -91,6 +91,8 @@ class JobScheduler:
             job.status = "running"
             session.commit()
 
+            rc = 0
+            message = "Job started"
             # Execute the command
             start_time = datetime.datetime.utcnow()
             logger.info(f"Executing job '{job.name}' (ID: {job.id})...")
@@ -111,7 +113,8 @@ class JobScheduler:
                 job.logs = json.dumps(logs)
             else:
                 logger.error(f"Invalid execution_time for job '{job.name}' (ID: {job.id}): {execution_time}")
-                return 8,"Invalid execution_time"
+                rc = 8
+                message = "Invalid execution_time"  
             # Update job status based on execution result
             if result.returncode == 0:
                 job.status = "complete"
@@ -134,12 +137,13 @@ class JobScheduler:
             else:
                 job.status = "failed"
                 logger.error(f"Job '{job.name}' failed with return code {result.returncode}.")
-                return 8,"Job failed"
+                rc = 8
+                message = "Job failed"
             
             job.last_run = end_time
             session.commit()
             logger.info(f"Job '{job.name}' (ID: {job.id}) status updated to '{job.status}'.")
-            return 0,"Job completed"
+            return rc,message
         except Exception as e:
             logger.error(f"Error executing job '{job.name}': {e}")
             if job:

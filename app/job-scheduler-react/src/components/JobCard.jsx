@@ -7,7 +7,7 @@ import { faEdit, faTrash, faArrowRight, faPlay, faFileAlt } from "@fortawesome/f
 import { toast } from "react-hot-toast";
 import ConfirmationModal from "./ConfirmationModal";
 
-const JobCard = ({ job, onClick, onDelete }) => {
+const JobCard = ({ job, onClick, onDelete, onStatusUpdate }) => {
   const navigate = useNavigate();
   const [dependencyNames, setDependencyNames] = useState([]);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -84,6 +84,7 @@ const JobCard = ({ job, onClick, onDelete }) => {
       const response = await updateJobStatus(job.id, newStatus, token);
       toast.success(response.message); // Display the API response message
       setSelectedStatus(newStatus); // Update the selected status
+      onStatusUpdate(); // Refresh the dashboard
     } catch (error) {
       console.error("Error updating job status:", error);
       toast.error(error.response?.data?.message || "Failed to update job status."); // Display the error message
@@ -100,6 +101,8 @@ const JobCard = ({ job, onClick, onDelete }) => {
     switch (status) {
       case "running":
         return "#2e7d32"; // Darker green for running
+      case "failed":
+        return "#d32f2f"; // Darker red for failed
       default:
         return "#2d2d2d"; // Default color for other statuses
     }
@@ -114,6 +117,8 @@ const JobCard = ({ job, onClick, onDelete }) => {
         return "#b0b0b0"; // Grey for inactive
       case "complete":
         return "#2196f3"; // Blue for complete
+      case "failed":
+        return "#d32f2f"; // Darker red for failed
       default:
         return "#ffffff"; // White for other statuses
     }
@@ -171,6 +176,7 @@ const JobCard = ({ job, onClick, onDelete }) => {
             <option value="scheduled">Scheduled</option>
             <option value="inactive">Inactive</option>
             <option value="complete">Complete</option>
+            <option value="failed">Failed</option>
           </select>
         </div>
         <div className="job-attribute">

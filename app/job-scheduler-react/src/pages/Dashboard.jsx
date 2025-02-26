@@ -8,7 +8,13 @@ import { toast } from "react-hot-toast";
 
 const Dashboard = () => {
   const [jobs, setJobs] = useState([]);
+  const [filteredJobs, setFilteredJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [filters, setFilters] = useState({
+    status: "",
+    name: "",
+    dependency: "",
+  });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -23,6 +29,7 @@ const Dashboard = () => {
         const data = await fetchJobs();
         console.log("Jobs fetched:", data);
         setJobs(data);
+        setFilteredJobs(data); // Initialize filtered jobs
       } catch (error) {
         console.error("Error loading jobs:", error);
         navigate("/login"); // Redirect to login if unauthorized
@@ -33,12 +40,13 @@ const Dashboard = () => {
 
   const handleDeleteJob = (jobId) => {
     setJobs((prevJobs) => prevJobs.filter((job) => job.id !== jobId));
+    setFilteredJobs((prevJobs) => prevJobs.filter((job) => job.id !== jobId));
   };
 
   const fetchJobsData = async () => {
     try {
       const jobs = await fetchJobs();
-      setJobs(jobs);
+      setJobs(jobs); // Only update the jobs state
     } catch (error) {
       console.error("Error fetching jobs:", error);
       toast.error("Failed to fetch jobs.");
@@ -55,17 +63,58 @@ const Dashboard = () => {
     return () => clearInterval(interval); // Cleanup on unmount
   }, []);
 
+  // Apply filters whenever filters change
+  useEffect(() => {
+    const filtered = jobs.filter((job) => {
+      const matchesStatus = filters.status ? job.status === filters.status : true;
+      const matchesName = filters.name
+        ? job.name.toLowerCase().includes(filters.name.toLowerCase())
+        : true;
+      const matchesDependency = filters.dependency
+        ? job.dependencies.includes(parseInt(filters.dependency))
+        : true;
+      return matchesStatus && matchesName && matchesDependency;
+    });
+    setFilteredJobs(filtered);
+  }, [filters, jobs]); // Reapply filters when filters or jobs change
+
   return (
     <div className="dashboard">
       <Sidebar />
       <div className="job-grid-container">
+        <div className="filter-bar">
+          <input
+            type="text"
+            placeholder="Search by job name"
+            value={filters.name}
+            onChange={(e) => setFilters({ ...filters, name: e.target.value })}
+          />
+          <select
+            value={filters.status}
+            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+          >
+            <option value="">All Statuses</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="inactive">Inactive</option>
+            <option value="complete">Complete</option>
+            <option value="failed">Failed</option>
+            <option value="running">Running</option>
+          </select>
+          <input
+            type="text"
+            placeholder="Filter by dependency ID"
+            value={filters.dependency}
+            onChange={(e) => setFilters({ ...filters, dependency: e.target.value })}
+          />
+        </div>
         <div className="job-grid">
-          {jobs.map((job) => (
+          {filteredJobs.map((job) => (
             <JobCard
               key={job.id}
               job={job}
               onClick={() => setSelectedJob(job)}
               onDelete={handleDeleteJob}
+              onStatusUpdate={fetchJobsData}
             />
           ))}
         </div>

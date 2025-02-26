@@ -527,4 +527,27 @@ body {
 
 .save-button:hover {
   background-color: #0056b3;
+}
+
+.filter-bar {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.filter-bar input,
+.filter-bar select {
+  padding: 8px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background-color: #1e1e1e;
+  color: #ffffff;
+}
+
+.filter-bar input::placeholder {
+  color: #b0b0b0;
+}
+
+.filter-bar select {
+  cursor: pointer;
 } 
