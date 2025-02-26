@@ -550,4 +550,77 @@ body {
 
 .filter-bar select {
   cursor: pointer;
+}
+
+.dependency-search-container {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.dependency-search-container input {
+  flex: 1;
+}
+
+.add-dependency-button {
+  padding: 8px 16px;
+  background-color: #007bff;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.add-dependency-button:disabled {
+  background-color: #b0b0b0;
+  cursor: not-allowed;
+}
+
+.dependency-dropdown {
+  background-color: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+
+.dependency-option {
+  padding: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.dependency-option:hover {
+  background-color: #3d3d3d;
+}
+
+.selected-dependencies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.dependency-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: #3d3d3d;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.remove-dependency-button {
+  background: none;
+  border: none;
+  color: #b0b0b0;
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+}
+
+.remove-dependency-button:hover {
+  color: #ffffff;
 } 

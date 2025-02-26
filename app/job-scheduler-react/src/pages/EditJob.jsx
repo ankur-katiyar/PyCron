@@ -1,16 +1,25 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import Sidebar from "../components/Sidebar";
+import { toast } from "react-hot-toast";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faTimes } from "@fortawesome/free-solid-svg-icons";
 
 const EditJob = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [jobName, setJobName] = useState("");
-  const [schedule, setSchedule] = useState("");
-  const [command, setCommand] = useState("");
-  const [dependencies, setDependencies] = useState("");
+  const [formData, setFormData] = useState({
+    name: "",
+    command: "",
+    schedule: "",
+    dependencies: [],
+  });
+  const [availableJobs, setAvailableJobs] = useState([]);
   const [error, setError] = useState("");
+  const [dependencySearch, setDependencySearch] = useState("");
+  const [filteredJobs, setFilteredJobs] = useState([]);
+  const [selectedDependency, setSelectedDependency] = useState(null);
 
   useEffect(() => {
     const fetchJob = async () => {
@@ -22,59 +31,116 @@ const EditJob = () => {
           },
         });
         const job = response.data;
-        setJobName(job.name);
-        setSchedule(job.schedule);
-        setCommand(job.command);
-
-        // Handle dependencies (convert JSON string to array if necessary)
-        const dependenciesArray = typeof job.dependencies === "string" 
-          ? JSON.parse(job.dependencies) 
-          : job.dependencies;
-        setDependencies(dependenciesArray.join(","));
+        setFormData({
+          name: job.name,
+          command: job.command,
+          schedule: typeof job.schedule === "object" ? JSON.stringify(job.schedule) : job.schedule,
+          dependencies: job.dependencies || [],
+        });
       } catch (error) {
         console.error("Error fetching job:", error);
         setError("Failed to fetch job details.");
       }
     };
+
+    const fetchJobs = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await axios.get("http://localhost:8000/jobs", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        // Filter out the current job from available dependencies
+        setAvailableJobs(response.data.filter(job => job.id !== parseInt(id)));
+      } catch (error) {
+        console.error("Error fetching jobs:", error);
+        setError("Failed to fetch available jobs for dependencies.");
+      }
+    };
+
     fetchJob();
+    fetchJobs();
   }, [id]);
+
+  // Filter jobs based on search input
+  useEffect(() => {
+    if (dependencySearch.trim() === "") {
+      setFilteredJobs([]);
+      return;
+    }
+
+    const searchLower = dependencySearch.toLowerCase();
+    const filtered = availableJobs.filter(
+      (job) => 
+        job.name.toLowerCase().includes(searchLower) && 
+        !formData.dependencies.includes(job.id)
+    );
+    setFilteredJobs(filtered);
+  }, [dependencySearch, availableJobs, formData.dependencies]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value,
+    });
+  };
+
+  const handleDependencySearchChange = (e) => {
+    setDependencySearch(e.target.value);
+    setSelectedDependency(null);
+  };
+
+  const handleSelectDependency = (job) => {
+    setSelectedDependency(job);
+    setDependencySearch(job.name);
+    setFilteredJobs([]);
+  };
+
+  const handleAddDependency = () => {
+    if (selectedDependency && !formData.dependencies.includes(selectedDependency.id)) {
+      setFormData({
+        ...formData,
+        dependencies: [...formData.dependencies, selectedDependency.id],
+      });
+      setDependencySearch("");
+      setSelectedDependency(null);
+    }
+  };
+
+  const handleRemoveDependency = (id) => {
+    setFormData({
+      ...formData,
+      dependencies: formData.dependencies.filter((depId) => depId !== id),
+    });
+  };
+
+  const getDependencyName = (id) => {
+    const job = availableJobs.find((job) => job.id === id);
+    return job ? job.name : `Unknown Job (ID: ${id})`;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // Convert dependencies from comma-separated string to array of integers
-    const dependenciesArray = dependencies
-      .split(",")
-      .map((id) => parseInt(id.trim()))
-      .filter((id) => !isNaN(id));
-
     try {
       const token = localStorage.getItem("token");
       const response = await axios.put(
         `http://localhost:8000/jobs/${id}`,
-        {
-          name: jobName,
-          schedule: schedule,
-          command: command,
-          dependencies: dependenciesArray,
-        },
+        formData,
         {
           headers: {
             Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
           },
         }
       );
-
-      console.log("Job updated:", response.data);
-      navigate("/"); // Redirect to the dashboard after successful update
+      toast.success("Job updated successfully!");
+      navigate("/dashboard");
     } catch (error) {
-      if (error.response) {
-        console.log("Server response data:", error.response.data);
-        setError("Failed to update job. Please try again.");
-      } else {
-        setError("Network error. Please check your connection.");
-      }
-      console.error("Update job error:", error);
+      console.error("Error updating job:", error);
+      setError("Failed to update job. Please check your inputs and try again.");
+      toast.error("Failed to update job.");
     }
   };
 
@@ -86,43 +152,85 @@ const EditJob = () => {
         {error && <p className="error">{error}</p>}
         <form onSubmit={handleSubmit}>
           <div>
-            <label>Job Name:</label>
+            <label htmlFor="name">Job Name:</label>
             <input
               type="text"
-              placeholder="Enter job name"
-              value={jobName}
-              onChange={(e) => setJobName(e.target.value)}
+              id="name"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
               required
             />
           </div>
           <div>
-            <label>Schedule:</label>
+            <label htmlFor="command">Command:</label>
             <input
               type="text"
-              placeholder="Enter cron schedule"
-              value={schedule}
-              onChange={(e) => setSchedule(e.target.value)}
+              id="command"
+              name="command"
+              value={formData.command}
+              onChange={handleChange}
               required
             />
           </div>
           <div>
-            <label>Command:</label>
+            <label htmlFor="schedule">Schedule:</label>
             <input
               type="text"
-              placeholder="Enter command"
-              value={command}
-              onChange={(e) => setCommand(e.target.value)}
+              id="schedule"
+              name="schedule"
+              value={formData.schedule}
+              onChange={handleChange}
               required
+              placeholder="cron expression or JSON object"
             />
           </div>
           <div>
-            <label>Dependencies:</label>
-            <input
-              type="text"
-              placeholder="Enter job IDs (comma-separated)"
-              value={dependencies}
-              onChange={(e) => setDependencies(e.target.value)}
-            />
+            <label htmlFor="dependency-search">Dependencies:</label>
+            <div className="dependency-search-container">
+              <input
+                type="text"
+                id="dependency-search"
+                placeholder="Search for jobs by name"
+                value={dependencySearch}
+                onChange={handleDependencySearchChange}
+              />
+              <button 
+                type="button" 
+                className="add-dependency-button"
+                onClick={handleAddDependency}
+                disabled={!selectedDependency}
+              >
+                Add
+              </button>
+            </div>
+            {filteredJobs.length > 0 && (
+              <div className="dependency-dropdown">
+                {filteredJobs.map((job) => (
+                  <div 
+                    key={job.id} 
+                    className="dependency-option"
+                    onClick={() => handleSelectDependency(job)}
+                  >
+                    {job.name} (ID: {job.id})
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="selected-dependencies">
+              {formData.dependencies.map((id) => (
+                <div key={id} className="dependency-tag">
+                  <span>{getDependencyName(id)}</span>
+                  <button 
+                    type="button"
+                    className="remove-dependency-button"
+                    onClick={() => handleRemoveDependency(id)}
+                  >
+                    <FontAwesomeIcon icon={faTimes} />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
           <button type="submit">Update Job</button>
         </form>

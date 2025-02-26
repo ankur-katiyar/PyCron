@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { deleteJob, getJobs, runJobAdhoc, updateJobStatus } from "../api/jobService";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faEdit, faTrash, faArrowRight, faPlay, faFileAlt } from "@fortawesome/free-solid-svg-icons";
+import { faEdit, faTrash, faArrowRight, faPlay, faFileAlt, faCopy } from "@fortawesome/free-solid-svg-icons";
 import { toast } from "react-hot-toast";
 import ConfirmationModal from "./ConfirmationModal";
 
@@ -96,6 +96,25 @@ const JobCard = ({ job, onClick, onDelete, onStatusUpdate }) => {
     navigate(`/logs/${job.id}`); // Navigate to the logs page
   };
 
+  // Handle clone job
+  const handleCloneJob = (e) => {
+    e.stopPropagation(); // Prevent the card's onClick from firing
+    
+    // Create a clone of the job with a new name
+    const clonedJob = {
+      ...job,
+      name: `${job.name} (Clone)`,
+    };
+    
+    // Store the cloned job in local storage
+    localStorage.setItem("clonedJob", JSON.stringify(clonedJob));
+    
+    // Navigate to the create job page
+    navigate("/create-job");
+    
+    toast.success(`Cloning job: ${job.name}`);
+  };
+
   // Get the color for the job card based on the status
   const getJobCardColor = (status) => {
     switch (status) {
@@ -144,6 +163,9 @@ const JobCard = ({ job, onClick, onDelete, onStatusUpdate }) => {
           </button>
           <button className="icon-button" onClick={handleViewLogs}>
             <FontAwesomeIcon icon={faFileAlt} />
+          </button>
+          <button className="icon-button" onClick={handleCloneJob}>
+            <FontAwesomeIcon icon={faCopy} />
           </button>
           <button
             className="icon-button"
